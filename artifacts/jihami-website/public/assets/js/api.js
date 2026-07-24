@@ -4,7 +4,9 @@
  * Base URL: https://jihami.co.ke
  */
 
-const API_BASE_URL = 'https://jihami.co.ke';
+// Using relative URLs so the Vite dev proxy can forward requests to
+// https://jihami.co.ke server-side (avoids browser CORS blocks).
+const API_BASE_URL = '';
 
 const API = {
 
