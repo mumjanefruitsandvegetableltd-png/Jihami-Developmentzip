@@ -71,6 +71,22 @@ const API = {
         transactions:       (startDate, endDate) => `${API_BASE_URL}/reports/transactions?startDate=${startDate}&endDate=${endDate}`,
     },
 
+    // ─── Wcol: Waste Collection Customers ───────────────────────────────────
+    wcolCustomers: {
+        list:               `${API_BASE_URL}/wcol/customers`,
+        create:             `${API_BASE_URL}/wcol/customers`,
+        get:                (id) => `${API_BASE_URL}/wcol/customers/${id}`,
+        update:             (id) => `${API_BASE_URL}/wcol/customers/${id}`,
+        delete:             (id) => `${API_BASE_URL}/wcol/customers/${id}`,
+        search:             (q, status, type) => {
+            const p = new URLSearchParams();
+            if (q)      p.set('search', q);
+            if (status) p.set('status', status);
+            if (type)   p.set('customer_type', type);
+            return `${API_BASE_URL}/wcol/customers?${p.toString()}`;
+        },
+    },
+
     // ─── POS: Customers ─────────────────────────────────────────────────────
     customers: {
         list:               `${API_BASE_URL}/api/pos/customers`,

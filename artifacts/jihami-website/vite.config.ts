@@ -84,6 +84,7 @@ export default defineConfig({
       '/api/suppliers':   { target: 'https://jihami.co.ke', changeOrigin: true, secure: false },
       '/api/stock':       { target: 'https://jihami.co.ke', changeOrigin: true, secure: false },
       '/api/hotel':       { target: 'https://jihami.co.ke', changeOrigin: true, secure: false },
+      '/wcol':            { target: 'https://jihami.co.ke', changeOrigin: true, secure: false },
     },
   },
   preview: {

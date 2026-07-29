@@ -1,0 +1,334 @@
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const db = require('../../db');
+
+const router = express.Router();
+
+const allowedCustomerTypes = ['Residential', 'Commercial', 'Industrial'];
+const allowedFrequencies = ['Daily', 'Weekly', 'Biweekly', 'Monthly'];
+const allowedStatuses = ['Active', 'Inactive'];
+
+function getBearerToken(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return null;
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer') return null;
+  return parts[1];
+}
+
+function verifyToken(req, res) {
+  const token = getBearerToken(req);
+  if (!token) {
+    res.status(401).json({ code: 401, message: 'Authorization header missing or malformed' });
+    return null;
+  }
+
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET);
+  } catch (error) {
+    console.error('Wcol Customer auth error:', error.message);
+    res.status(403).json({
+      code: 403,
+      message: error.name === 'TokenExpiredError' ? 'Token expired' : 'Invalid token'
+    });
+    return null;
+  }
+}
+
+async function resolveBusinessIdFromToken(token) {
+  if (!token || !token.id || !token.grantLevel) return null;
+
+  if (token.grantLevel === 1) {
+    return token.id;
+  }
+
+  if (token.grantLevel === 2) {
+    try {
+      const [rows] = await db.query('SELECT business_id FROM users WHERE id = ? LIMIT 1', [token.id]);
+      if (rows.length > 0 && rows[0].business_id) {
+        return rows[0].business_id;
+      }
+    } catch (error) {
+      console.error('Error resolving business id for wcol customer:', error);
+    }
+  }
+  return null;
+}
+
+router.use((req, res, next) => {
+  console.log(`🔍 Wcol Customer Router - ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+router.get('/', async (req, res) => {
+  try {
+    const token = verifyToken(req, res);
+    if (!token) return;
+
+    const businessId = await resolveBusinessIdFromToken(token);
+    if (!businessId) {
+      return res.status(403).json({ code: 403, message: 'Unable to determine business association' });
+    }
+
+    const { search, status, customer_type } = req.query;
+    const conditions = ['business_id = ?'];
+    const params = [businessId];
+
+    if (search) {
+      const like = `%${search}%`;
+      conditions.push('(customer_code LIKE ? OR full_name LIKE ? OR phone LIKE ? OR email LIKE ? OR address LIKE ?)');
+      params.push(like, like, like, like, like);
+    }
+
+    if (status && allowedStatuses.includes(status)) {
+      conditions.push('status = ?');
+      params.push(status);
+    }
+
+    if (customer_type && allowedCustomerTypes.includes(customer_type)) {
+      conditions.push('customer_type = ?');
+      params.push(customer_type);
+    }
+
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
+    const [rows] = await db.query(`SELECT * FROM Wcol_Customers ${whereClause} ORDER BY created_at DESC`, params);
+
+    return res.status(200).json({ code: 101, message: 'Customers retrieved successfully', data: rows });
+  } catch (error) {
+    console.error('❌ Wcol customer list error:', error);
+    return res.status(500).json({ code: 500, message: 'Failed to retrieve customers', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+  }
+});
+
+router.get('/:id', async (req, res) => {
+  try {
+    const token = verifyToken(req, res);
+    if (!token) return;
+
+    const businessId = await resolveBusinessIdFromToken(token);
+    if (!businessId) {
+      return res.status(403).json({ code: 403, message: 'Unable to determine business association' });
+    }
+
+    const customerId = parseInt(req.params.id, 10);
+    if (Number.isNaN(customerId)) {
+      return res.status(400).json({ code: 400, message: 'Invalid customer ID' });
+    }
+
+    const [rows] = await db.query('SELECT * FROM Wcol_Customers WHERE id = ? AND business_id = ?', [customerId, businessId]);
+    if (rows.length === 0) {
+      return res.status(404).json({ code: 404, message: 'Customer not found' });
+    }
+
+    return res.status(200).json({ code: 101, message: 'Customer retrieved successfully', data: rows[0] });
+  } catch (error) {
+    console.error('❌ Wcol customer fetch error:', error);
+    return res.status(500).json({ code: 500, message: 'Failed to fetch customer', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+  }
+});
+
+router.post('/', async (req, res) => {
+  try {
+    const token = verifyToken(req, res);
+    if (!token) return;
+
+    const businessId = await resolveBusinessIdFromToken(token);
+    if (!businessId) {
+      return res.status(403).json({ code: 403, message: 'Unable to determine business association' });
+    }
+
+    const {
+      customer_code,
+      full_name,
+      phone,
+      email,
+      address,
+      customer_type,
+      waste_type,
+      collection_frequency,
+      status,
+      plan_id
+    } = req.body;
+
+    if (!customer_code || !full_name) {
+      return res.status(400).json({ code: 400, message: 'customer_code and full_name are required' });
+    }
+
+    if (plan_id !== undefined && plan_id !== null && Number.isNaN(parseInt(plan_id, 10))) {
+      return res.status(400).json({ code: 400, message: 'plan_id must be an integer or null' });
+    }
+
+    if (customer_type && !allowedCustomerTypes.includes(customer_type)) {
+      return res.status(400).json({ code: 400, message: `customer_type must be one of ${allowedCustomerTypes.join(', ')}` });
+    }
+
+    if (collection_frequency && !allowedFrequencies.includes(collection_frequency)) {
+      return res.status(400).json({ code: 400, message: `collection_frequency must be one of ${allowedFrequencies.join(', ')}` });
+    }
+
+    if (status && !allowedStatuses.includes(status)) {
+      return res.status(400).json({ code: 400, message: `status must be one of ${allowedStatuses.join(', ')}` });
+    }
+
+    const [result] = await db.query(
+      `INSERT INTO Wcol_Customers (business_id, customer_code, full_name, phone, email, address, customer_type, waste_type, collection_frequency, status, plan_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        businessId,
+        customer_code,
+        full_name,
+        phone || null,
+        email || null,
+        address || null,
+        customer_type || 'Residential',
+        waste_type || null,
+        collection_frequency || null,
+        status || 'Active',
+        plan_id !== undefined ? plan_id : null
+      ]
+    );
+
+    return res.status(201).json({ code: 101, message: 'Customer created successfully', data: { id: result.insertId } });
+  } catch (error) {
+    console.error('❌ Wcol customer create error:', error);
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ code: 409, message: 'Customer code already exists' });
+    }
+    return res.status(500).json({ code: 500, message: 'Failed to create customer', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+  }
+});
+
+router.put('/:id', async (req, res) => {
+  try {
+    const token = verifyToken(req, res);
+    if (!token) return;
+
+    const businessId = await resolveBusinessIdFromToken(token);
+    if (!businessId) {
+      return res.status(403).json({ code: 403, message: 'Unable to determine business association' });
+    }
+
+    const customerId = parseInt(req.params.id, 10);
+    if (Number.isNaN(customerId)) {
+      return res.status(400).json({ code: 400, message: 'Invalid customer ID' });
+    }
+
+    const {
+      customer_code,
+      full_name,
+      phone,
+      email,
+      address,
+      customer_type,
+      waste_type,
+      collection_frequency,
+      status,
+      plan_id
+    } = req.body;
+
+    const updates = [];
+    const params = [];
+
+    if (customer_code !== undefined) {
+      updates.push('customer_code = ?');
+      params.push(customer_code);
+    }
+    if (full_name !== undefined) {
+      updates.push('full_name = ?');
+      params.push(full_name);
+    }
+    if (phone !== undefined) {
+      updates.push('phone = ?');
+      params.push(phone || null);
+    }
+    if (email !== undefined) {
+      updates.push('email = ?');
+      params.push(email || null);
+    }
+    if (address !== undefined) {
+      updates.push('address = ?');
+      params.push(address || null);
+    }
+    if (customer_type !== undefined) {
+      if (!allowedCustomerTypes.includes(customer_type)) {
+        return res.status(400).json({ code: 400, message: `customer_type must be one of ${allowedCustomerTypes.join(', ')}` });
+      }
+      updates.push('customer_type = ?');
+      params.push(customer_type);
+    }
+    if (waste_type !== undefined) {
+      updates.push('waste_type = ?');
+      params.push(waste_type || null);
+    }
+    if (collection_frequency !== undefined) {
+      if (!allowedFrequencies.includes(collection_frequency)) {
+        return res.status(400).json({ code: 400, message: `collection_frequency must be one of ${allowedFrequencies.join(', ')}` });
+      }
+      updates.push('collection_frequency = ?');
+      params.push(collection_frequency);
+    }
+    if (status !== undefined) {
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({ code: 400, message: `status must be one of ${allowedStatuses.join(', ')}` });
+      }
+      updates.push('status = ?');
+      params.push(status);
+    }
+    if (plan_id !== undefined) {
+      if (plan_id !== null && Number.isNaN(parseInt(plan_id, 10))) {
+        return res.status(400).json({ code: 400, message: 'plan_id must be an integer or null' });
+      }
+      updates.push('plan_id = ?');
+      params.push(plan_id || null);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ code: 400, message: 'No update fields provided' });
+    }
+
+    params.push(customerId, businessId);
+    const sql = `UPDATE Wcol_Customers SET ${updates.join(', ')} WHERE id = ? AND business_id = ?`;
+    const [result] = await db.query(sql, params);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ code: 404, message: 'Customer not found' });
+    }
+
+    return res.status(200).json({ code: 101, message: 'Customer updated successfully' });
+  } catch (error) {
+    console.error('❌ Wcol customer update error:', error);
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ code: 409, message: 'Customer code already exists' });
+    }
+    return res.status(500).json({ code: 500, message: 'Failed to update customer', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    const token = verifyToken(req, res);
+    if (!token) return;
+
+    const businessId = await resolveBusinessIdFromToken(token);
+    if (!businessId) {
+      return res.status(403).json({ code: 403, message: 'Unable to determine business association' });
+    }
+
+    const customerId = parseInt(req.params.id, 10);
+    if (Number.isNaN(customerId)) {
+      return res.status(400).json({ code: 400, message: 'Invalid customer ID' });
+    }
+
+    const [result] = await db.query('DELETE FROM Wcol_Customers WHERE id = ? AND business_id = ?', [customerId, businessId]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ code: 404, message: 'Customer not found' });
+    }
+
+    return res.status(200).json({ code: 101, message: 'Customer deleted successfully' });
+  } catch (error) {
+    console.error('❌ Wcol customer delete error:', error);
+    return res.status(500).json({ code: 500, message: 'Failed to delete customer', error: process.env.NODE_ENV === 'development' ? error.message : undefined });
+  }
+});
+
+module.exports = router;

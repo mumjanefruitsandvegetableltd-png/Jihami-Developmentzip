@@ -64,6 +64,7 @@ const Router = {
             '/categories': 'Categories',
             '/credit-notes': 'Credit Notes',
             '/hotel': 'Hotel Management',
+            '/wcol-customers': 'Wcol Customers',
             '/settings': 'Settings',
             '/profile': 'Profile',
         };
