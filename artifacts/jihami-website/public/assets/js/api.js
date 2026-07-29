@@ -77,27 +77,27 @@ const API = {
             const p = new URLSearchParams({ month, year });
             if (customerId) p.set('customer_id', customerId);
             if (status)     p.set('status', status);
-            return `${API_BASE_URL}/wcol/collections?${p.toString()}`;
+            return `${API_BASE_URL}/api/wasteCol/collections?${p.toString()}`;
         },
-        create: `${API_BASE_URL}/wcol/collections`,
-        get:    (id) => `${API_BASE_URL}/wcol/collections/${id}`,
-        update: (id) => `${API_BASE_URL}/wcol/collections/${id}`,
-        delete: (id) => `${API_BASE_URL}/wcol/collections/${id}`,
+        create: `${API_BASE_URL}/api/wasteCol/collections`,
+        get:    (id) => `${API_BASE_URL}/api/wasteCol/collections/${id}`,
+        update: (id) => `${API_BASE_URL}/api/wasteCol/collections/${id}`,
+        delete: (id) => `${API_BASE_URL}/api/wasteCol/collections/${id}`,
     },
 
     // ─── Wcol: Waste Collection Customers ───────────────────────────────────
     wcolCustomers: {
-        list:               `${API_BASE_URL}/wcol/customers`,
-        create:             `${API_BASE_URL}/wcol/customers`,
-        get:                (id) => `${API_BASE_URL}/wcol/customers/${id}`,
-        update:             (id) => `${API_BASE_URL}/wcol/customers/${id}`,
-        delete:             (id) => `${API_BASE_URL}/wcol/customers/${id}`,
+        list:               `${API_BASE_URL}/api/wasteCol/customers`,
+        create:             `${API_BASE_URL}/api/wasteCol/customers`,
+        get:                (id) => `${API_BASE_URL}/api/wasteCol/customers/${id}`,
+        update:             (id) => `${API_BASE_URL}/api/wasteCol/customers/${id}`,
+        delete:             (id) => `${API_BASE_URL}/api/wasteCol/customers/${id}`,
         search:             (q, status, type) => {
             const p = new URLSearchParams();
             if (q)      p.set('search', q);
             if (status) p.set('status', status);
             if (type)   p.set('customer_type', type);
-            return `${API_BASE_URL}/wcol/customers?${p.toString()}`;
+            return `${API_BASE_URL}/api/wasteCol/customers?${p.toString()}`;
         },
     },
 
