@@ -71,6 +71,20 @@ const API = {
         transactions:       (startDate, endDate) => `${API_BASE_URL}/reports/transactions?startDate=${startDate}&endDate=${endDate}`,
     },
 
+    // ─── Wcol: Collections ──────────────────────────────────────────────────
+    wcolCollections: {
+        list:   (month, year, customerId, status) => {
+            const p = new URLSearchParams({ month, year });
+            if (customerId) p.set('customer_id', customerId);
+            if (status)     p.set('status', status);
+            return `${API_BASE_URL}/wcol/collections?${p.toString()}`;
+        },
+        create: `${API_BASE_URL}/wcol/collections`,
+        get:    (id) => `${API_BASE_URL}/wcol/collections/${id}`,
+        update: (id) => `${API_BASE_URL}/wcol/collections/${id}`,
+        delete: (id) => `${API_BASE_URL}/wcol/collections/${id}`,
+    },
+
     // ─── Wcol: Waste Collection Customers ───────────────────────────────────
     wcolCustomers: {
         list:               `${API_BASE_URL}/wcol/customers`,

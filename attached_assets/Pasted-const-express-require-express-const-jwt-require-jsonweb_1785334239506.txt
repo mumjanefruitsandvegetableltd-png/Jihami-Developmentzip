@@ -1,0 +1,438 @@
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const db = require('../../db');
+
+const router = express.Router();
+
+function getBearerToken(req) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return null;
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer') return null;
+  return parts[1];
+}
+
+function verifyToken(req, res) {
+  const token = getBearerToken(req);
+  if (!token) {
+    res.status(401).json({ code: 401, message: 'Authorization header missing or malformed' });
+    return null;
+  }
+
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET);
+  } catch (error) {
+    console.error('Wcol Collection auth error:', error.message);
+    res.status(403).json({
+      code: 403,
+      message: error.name === 'TokenExpiredError' ? 'Token expired' : 'Invalid token'
+    });
+    return null;
+  }
+}
+
+async function resolveBusinessIdFromToken(token) {
+  if (!token || !token.id || !token.grantLevel) return null;
+
+  if (token.grantLevel === 1) {
+    return token.id;
+  }
+
+  if (token.grantLevel === 2) {
+    try {
+      const [rows] = await db.query('SELECT business_id FROM users WHERE id = ? LIMIT 1', [token.id]);
+      if (rows.length > 0 && rows[0].business_id) {
+        return rows[0].business_id;
+      }
+    } catch (error) {
+      console.error('Error resolving business id for wcol collection:', error);
+    }
+  }
+  return null;
+}
+
+router.use((req, res, next) => {
+  console.log(`🔍 Wcol Collection Router - ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+/**
+ * GET /api/wasteCol/collections
+ * Query params:
+ *   - month: 1-12
+ *   - year: YYYY
+ *   - customer_id: (optional) filter by customer
+ *   - status: (optional) 'Completed', 'Missed', 'Skipped'
+ */
+router.get('/', async (req, res) => {
+  try {
+    const token = verifyToken(req, res);
+    if (!token) return;
+
+    const businessId = await resolveBusinessIdFromToken(token);
+    if (!businessId) {
+      return res.status(403).json({ code: 403, message: 'Unable to determine business association' });
+    }
+
+    const { month, year, customer_id, status } = req.query;
+
+    // Validate required query parameters
+    if (!month || !year) {
+      return res.status(400).json({
+        code: 400,
+        message: 'month and year are required query parameters'
+      });
+    }
+
+    const monthNum = parseInt(month, 10);
+    const yearNum = parseInt(year, 10);
+
+    if (Number.isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+      return res.status(400).json({ code: 400, message: 'month must be between 1 and 12' });
+    }
+
+    if (Number.isNaN(yearNum) || yearNum < 2000 || yearNum > 2100) {
+      return res.status(400).json({ code: 400, message: 'year must be between 2000 and 2100' });
+    }
+
+    // Calculate date range for the entire month
+    const startDate = new Date(yearNum, monthNum - 1, 1);
+    const endDate = new Date(yearNum, monthNum, 0, 23, 59, 59);
+
+    // Build SQL query
+    const conditions = [
+      'wc.collection_date >= ?',
+      'wc.collection_date <= ?',
+      'wcust.business_id = ?'
+    ];
+    const params = [startDate, endDate, businessId];
+
+    if (customer_id) {
+      const customerId = parseInt(customer_id, 10);
+      if (!Number.isNaN(customerId)) {
+        conditions.push('wc.customer_id = ?');
+        params.push(customerId);
+      }
+    }
+
+    if (status && ['Completed', 'Missed', 'Skipped'].includes(status)) {
+      conditions.push('wc.status = ?');
+      params.push(status);
+    }
+
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
+    const sql = `
+      SELECT 
+        wc.id,
+        wc.customer_id,
+        wc.schedule_id,
+        wc.collected_by,
+        wc.vehicle_id,
+        wc.collection_date,
+        wc.status,
+        wc.notes,
+        wc.created_at,
+        wcust.customer_code,
+        wcust.full_name,
+        wcust.phone,
+        wcust.customer_type,
+        wcust.collection_frequency
+      FROM Wcol_Collections wc
+      INNER JOIN Wcol_Customers wcust ON wc.customer_id = wcust.id
+      ${whereClause}
+      ORDER BY wc.collection_date ASC
+    `;
+
+    const [rows] = await db.query(sql, params);
+
+    return res.status(200).json({
+      code: 101,
+      message: `Collections retrieved for ${monthNum}/${yearNum}`,
+      data: rows,
+      metadata: {
+        month: monthNum,
+        year: yearNum,
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: endDate.toISOString().split('T')[0],
+        total_records: rows.length
+      }
+    });
+  } catch (error) {
+    console.error('❌ Wcol collection list error:', error);
+    return res.status(500).json({
+      code: 500,
+      message: 'Failed to retrieve collections',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * GET /api/wasteCol/collections/:id
+ */
+router.get('/:id', async (req, res) => {
+  try {
+    const token = verifyToken(req, res);
+    if (!token) return;
+
+    const businessId = await resolveBusinessIdFromToken(token);
+    if (!businessId) {
+      return res.status(403).json({ code: 403, message: 'Unable to determine business association' });
+    }
+
+    const collectionId = parseInt(req.params.id, 10);
+    if (Number.isNaN(collectionId)) {
+      return res.status(400).json({ code: 400, message: 'Invalid collection ID' });
+    }
+
+    const [rows] = await db.query(`
+      SELECT 
+        wc.id,
+        wc.customer_id,
+        wc.schedule_id,
+        wc.collected_by,
+        wc.vehicle_id,
+        wc.collection_date,
+        wc.status,
+        wc.notes,
+        wc.created_at,
+        wcust.customer_code,
+        wcust.full_name,
+        wcust.phone,
+        wcust.customer_type,
+        wcust.collection_frequency
+      FROM Wcol_Collections wc
+      INNER JOIN Wcol_Customers wcust ON wc.customer_id = wcust.id
+      WHERE wc.id = ? AND wcust.business_id = ?
+      LIMIT 1
+    `, [collectionId, businessId]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ code: 404, message: 'Collection not found' });
+    }
+
+    return res.status(200).json({
+      code: 101,
+      message: 'Collection retrieved successfully',
+      data: rows[0]
+    });
+  } catch (error) {
+    console.error('❌ Wcol collection fetch error:', error);
+    return res.status(500).json({
+      code: 500,
+      message: 'Failed to fetch collection',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * POST /api/wasteCol/collections
+ */
+router.post('/', async (req, res) => {
+  try {
+    const token = verifyToken(req, res);
+    if (!token) return;
+
+    const businessId = await resolveBusinessIdFromToken(token);
+    if (!businessId) {
+      return res.status(403).json({ code: 403, message: 'Unable to determine business association' });
+    }
+
+    const {
+      customer_id,
+      schedule_id,
+      collected_by,
+      vehicle_id,
+      collection_date,
+      status,
+      notes
+    } = req.body;
+
+    if (!customer_id || !collection_date) {
+      return res.status(400).json({
+        code: 400,
+        message: 'customer_id and collection_date are required'
+      });
+    }
+
+    // Verify customer belongs to this business
+    const [customerCheck] = await db.query(
+      'SELECT id FROM Wcol_Customers WHERE id = ? AND business_id = ? LIMIT 1',
+      [customer_id, businessId]
+    );
+
+    if (customerCheck.length === 0) {
+      return res.status(403).json({
+        code: 403,
+        message: 'Customer does not belong to your business'
+      });
+    }
+
+    if (status && !['Completed', 'Missed', 'Skipped'].includes(status)) {
+      return res.status(400).json({
+        code: 400,
+        message: 'status must be one of: Completed, Missed, Skipped'
+      });
+    }
+
+    const [result] = await db.query(
+      `INSERT INTO Wcol_Collections 
+       (customer_id, schedule_id, collected_by, vehicle_id, collection_date, status, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        customer_id,
+        schedule_id || null,
+        collected_by || null,
+        vehicle_id || null,
+        collection_date,
+        status || 'Completed',
+        notes || null
+      ]
+    );
+
+    return res.status(201).json({
+      code: 101,
+      message: 'Collection created successfully',
+      data: { id: result.insertId }
+    });
+  } catch (error) {
+    console.error('❌ Wcol collection create error:', error);
+    return res.status(500).json({
+      code: 500,
+      message: 'Failed to create collection',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * PUT /api/wasteCol/collections/:id
+ */
+router.put('/:id', async (req, res) => {
+  try {
+    const token = verifyToken(req, res);
+    if (!token) return;
+
+    const businessId = await resolveBusinessIdFromToken(token);
+    if (!businessId) {
+      return res.status(403).json({ code: 403, message: 'Unable to determine business association' });
+    }
+
+    const collectionId = parseInt(req.params.id, 10);
+    if (Number.isNaN(collectionId)) {
+      return res.status(400).json({ code: 400, message: 'Invalid collection ID' });
+    }
+
+    const {
+      schedule_id,
+      collected_by,
+      vehicle_id,
+      collection_date,
+      status,
+      notes
+    } = req.body;
+
+    const updates = [];
+    const params = [];
+
+    if (schedule_id !== undefined) {
+      updates.push('schedule_id = ?');
+      params.push(schedule_id || null);
+    }
+    if (collected_by !== undefined) {
+      updates.push('collected_by = ?');
+      params.push(collected_by || null);
+    }
+    if (vehicle_id !== undefined) {
+      updates.push('vehicle_id = ?');
+      params.push(vehicle_id || null);
+    }
+    if (collection_date !== undefined) {
+      updates.push('collection_date = ?');
+      params.push(collection_date);
+    }
+    if (status !== undefined) {
+      if (!['Completed', 'Missed', 'Skipped'].includes(status)) {
+        return res.status(400).json({
+          code: 400,
+          message: 'status must be one of: Completed, Missed, Skipped'
+        });
+      }
+      updates.push('status = ?');
+      params.push(status);
+    }
+    if (notes !== undefined) {
+      updates.push('notes = ?');
+      params.push(notes || null);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ code: 400, message: 'No update fields provided' });
+    }
+
+    params.push(collectionId, businessId);
+    const sql = `
+      UPDATE Wcol_Collections wc
+      INNER JOIN Wcol_Customers wcust ON wc.customer_id = wcust.id
+      SET ${updates.join(', ')}
+      WHERE wc.id = ? AND wcust.business_id = ?
+    `;
+
+    const [result] = await db.query(sql, params);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ code: 404, message: 'Collection not found' });
+    }
+
+    return res.status(200).json({ code: 101, message: 'Collection updated successfully' });
+  } catch (error) {
+    console.error('❌ Wcol collection update error:', error);
+    return res.status(500).json({
+      code: 500,
+      message: 'Failed to update collection',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * DELETE /api/wasteCol/collections/:id
+ */
+router.delete('/:id', async (req, res) => {
+  try {
+    const token = verifyToken(req, res);
+    if (!token) return;
+
+    const businessId = await resolveBusinessIdFromToken(token);
+    if (!businessId) {
+      return res.status(403).json({ code: 403, message: 'Unable to determine business association' });
+    }
+
+    const collectionId = parseInt(req.params.id, 10);
+    if (Number.isNaN(collectionId)) {
+      return res.status(400).json({ code: 400, message: 'Invalid collection ID' });
+    }
+
+    const [result] = await db.query(`
+      DELETE wc FROM Wcol_Collections wc
+      INNER JOIN Wcol_Customers wcust ON wc.customer_id = wcust.id
+      WHERE wc.id = ? AND wcust.business_id = ?
+    `, [collectionId, businessId]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ code: 404, message: 'Collection not found' });
+    }
+
+    return res.status(200).json({ code: 101, message: 'Collection deleted successfully' });
+  } catch (error) {
+    console.error('❌ Wcol collection delete error:', error);
+    return res.status(500).json({
+      code: 500,
+      message: 'Failed to delete collection',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+module.exports = router;
