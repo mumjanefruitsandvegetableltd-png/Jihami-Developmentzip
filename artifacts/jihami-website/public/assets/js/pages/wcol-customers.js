@@ -193,9 +193,21 @@ const WcolCustomersPage = {
         }
     },
 
-    renderForm(container, editData = null) {
+    async renderForm(container, editData = null) {
         const isEdit = !!editData;
         const v = editData || {};
+
+        // Fetch cycles for the plan dropdown
+        let cycleOptions = [{ value: '', label: '— No plan —' }];
+        try {
+            const res = await HttpService.get(API.wcolCycles.list);
+            const cycles = res.ok ? (res.data.data || res.data || []) : [];
+            if (Array.isArray(cycles)) {
+                cycleOptions = cycleOptions.concat(
+                    cycles.map(c => ({ value: String(c.id), label: c.name }))
+                );
+            }
+        } catch (_) { /* show dropdown with no options on error */ }
 
         container.innerHTML = `
             <div class="page-toolbar">
@@ -250,7 +262,7 @@ const WcolCustomersPage = {
                             ], v.status || 'Active'), 'wcolStatus')}
                     </div>
                     <div class="col-md-4">
-                        ${UI.formGroup('Plan ID', UI.input('wcolPlan', 'number', 'Optional plan ID', v.plan_id != null ? v.plan_id : ''), 'wcolPlan')}
+                        ${UI.formGroup('Plan', UI.select('wcolPlan', cycleOptions, v.plan_id != null ? String(v.plan_id) : ''), 'wcolPlan')}
                     </div>
                     <div class="col-12">
                         <button type="submit" class="btn btn-primary">
@@ -262,7 +274,7 @@ const WcolCustomersPage = {
 
         document.getElementById('wcolForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const planRaw = document.getElementById('wcolPlan').value.trim();
+            const planRaw = document.getElementById('wcolPlan').value;
             const payload = {
                 customer_code:        document.getElementById('wcolCode').value.trim(),
                 full_name:            document.getElementById('wcolName').value.trim(),

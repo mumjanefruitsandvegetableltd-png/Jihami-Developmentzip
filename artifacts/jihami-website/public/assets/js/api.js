@@ -71,6 +71,11 @@ const API = {
         transactions:       (startDate, endDate) => `${API_BASE_URL}/reports/transactions?startDate=${startDate}&endDate=${endDate}`,
     },
 
+    // ─── Wcol: Cycles (collection plans) ────────────────────────────────────
+    wcolCycles: {
+        list: `${API_BASE_URL}/api/wasteCol/collections/cycles`,
+    },
+
     // ─── Wcol: Collections ──────────────────────────────────────────────────
     wcolCollections: {
         list:   (month, year, customerId, status) => {
