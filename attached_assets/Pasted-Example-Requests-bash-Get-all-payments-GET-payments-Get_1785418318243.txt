@@ -1,0 +1,168 @@
+Example Requests:
+bash
+# Get all payments
+GET /payments
+
+# Get payments for specific customer
+GET /payments?customer_id=123
+
+# Get payments by method
+GET /payments?payment_method=M-Pesa
+
+# Get payments in date range
+GET /payments?start_date=2026-07-01&end_date=2026-07-31
+
+# Combine filters
+GET /payments?customer_id=123&payment_method=Cash&start_date=2026-07-01
+Response:
+json
+{
+  "code": 101,
+  "message": "Payments retrieved successfully",
+  "data": [
+    {
+      "id": 1,
+      "customer_id": 123,
+      "invoice_id": 456,
+      "amount_paid": 500.00,
+      "payment_method": "M-Pesa",
+      "reference_no": "MPESA-123456",
+      "payment_date": "2026-07-30",
+      "customer_code": "CUST-001",
+      "full_name": "John Doe",
+      "phone": "+1234567890",
+      "email": "john@example.com"
+    },
+    {
+      "id": 2,
+      "customer_id": 123,
+      "invoice_id": null,
+      "amount_paid": 250.00,
+      "payment_method": "Cash",
+      "reference_no": null,
+      "payment_date": "2026-07-28",
+      "customer_code": "CUST-001",
+      "full_name": "John Doe",
+      "phone": "+1234567890",
+      "email": "john@example.com"
+    }
+  ],
+  "metadata": {
+    "total_records": 2,
+    "total_amount": 750.00
+  }
+}
+2. GET Single Payment
+text
+GET /payments/:id
+Example:
+bash
+GET /payments/1
+Response:
+json
+{
+  "code": 101,
+  "message": "Payment retrieved successfully",
+  "data": {
+    "id": 1,
+    "customer_id": 123,
+    "invoice_id": 456,
+    "amount_paid": 500.00,
+    "payment_method": "M-Pesa",
+    "reference_no": "MPESA-123456",
+    "payment_date": "2026-07-30",
+    "customer_code": "CUST-001",
+    "full_name": "John Doe",
+    "phone": "+1234567890",
+    "email": "john@example.com"
+  }
+}
+Error Response:
+json
+{
+  "code": 404,
+  "message": "Payment not found"
+}
+3. POST Create Payment
+text
+POST /payments
+Payload:
+Field	Type	Required	Description
+customer_id	integer	✅ Yes	ID of the customer making payment
+amount_paid	decimal	✅ Yes	Amount paid (must be > 0)
+payment_method	string	✅ Yes	Cash, M-Pesa, Bank Transfer, Cheque, Card, Other
+invoice_id	integer	❌ No	Invoice ID if paying against an invoice
+reference_no	string	❌ No	Reference number (e.g., M-Pesa transaction ID)
+payment_date	date	❌ No	Defaults to today if not provided
+Example Request:
+bash
+POST /payments
+json
+{
+  "customer_id": 123,
+  "invoice_id": 456,
+  "amount_paid": 500.00,
+  "payment_method": "M-Pesa",
+  "reference_no": "MPESA-123456789",
+  "payment_date": "2026-07-30"
+}
+Response (Success):
+json
+{
+  "code": 101,
+  "message": "Payment created successfully",
+  "data": {
+    "id": 1,
+    "customer": {
+      "id": 123,
+      "customer_code": "CUST-001",
+      "full_name": "John Doe"
+    }
+  }
+}
+Error Responses:
+json
+// Missing required fields
+{
+  "code": 400,
+  "message": "customer_id, amount_paid, and payment_method are required"
+}
+
+// Invalid payment method
+{
+  "code": 400,
+  "message": "payment_method must be one of: Cash, M-Pesa, Bank Transfer, Cheque, Card, Other"
+}
+
+// Invalid amount
+{
+  "code": 400,
+  "message": "amount_paid must be a positive number"
+}
+
+// Customer not found or doesn't belong to business
+{
+  "code": 403,
+  "message": "Customer does not belong to your business"
+}
+
+// Payment exceeds invoice balance
+{
+  "code": 400,
+  "message": "Payment amount (500) exceeds remaining balance (300)"
+}
+
+// Invoice not found or doesn't belong to customer
+{
+  "code": 400,
+  "message": "Invoice not found or does not belong to this customer"
+}
+4. PUT Update Payment
+text
+PUT /payments/:id
+Payload: (All fields optional)
+Field	Type	Description
+amount_paid	decimal	New amount (must be > 0)
+payment_method	string	Cash, M-Pesa, Bank Transfer, Cheque, Card, Other
+reference_no	string	New reference number
+payment_date	date	New payment date
