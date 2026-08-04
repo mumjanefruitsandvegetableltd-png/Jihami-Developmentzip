@@ -71,6 +71,28 @@ const API = {
         transactions:       (startDate, endDate) => `${API_BASE_URL}/reports/transactions?startDate=${startDate}&endDate=${endDate}`,
     },
 
+    // ─── Wcol: Invoices ─────────────────────────────────────────────────────
+    wcolInvoices: {
+        list:        (filters = {}) => {
+            const p = new URLSearchParams();
+            if (filters.customer_id) p.set('customer_id', filters.customer_id);
+            if (filters.status)      p.set('status',      filters.status);
+            if (filters.cycle_type)  p.set('cycle_type',  filters.cycle_type);
+            if (filters.start_date)  p.set('start_date',  filters.start_date);
+            if (filters.end_date)    p.set('end_date',    filters.end_date);
+            if (filters.page)        p.set('page',        filters.page);
+            if (filters.limit)       p.set('limit',       filters.limit);
+            const qs = p.toString();
+            return `${API_BASE_URL}/api/wasteCol/invoices${qs ? '?' + qs : ''}`;
+        },
+        get:         (id)    => `${API_BASE_URL}/api/wasteCol/invoices/${id}`,
+        update:      (id)    => `${API_BASE_URL}/api/wasteCol/invoices/${id}`,
+        status:              `${API_BASE_URL}/api/wasteCol/invoices/status`,
+        upcoming:            `${API_BASE_URL}/api/wasteCol/invoices/upcoming`,
+        sync:                `${API_BASE_URL}/api/wasteCol/invoices/sync`,
+        checkOverdue:        `${API_BASE_URL}/api/wasteCol/invoices/check-overdue`,
+    },
+
     // ─── Wcol: Payments ─────────────────────────────────────────────────────
     wcolPayments: {
         list:   (filters = {}) => {

@@ -1,0 +1,277 @@
+COMPLETE FRONTEND-READY INVOICE AUTOMATION SYSTEM
+Here's the complete documentation for your frontend team with all endpoints, payloads, responses, and automation details.
+
+📋 API OVERVIEW
+Base URL: https://jihami.co.ke/api/wasteCol/invoices
+
+Authentication: All endpoints require Bearer Token
+
+text
+Authorization: Bearer YOUR_JWT_TOKEN
+Content-Type: application/json
+🔘 INVOICE GENERATION (MANUAL TRIGGER)
+POST /sync
+Purpose: Manual button to generate invoices for all active customers
+
+Payload:
+
+json
+{
+  "force": false,        // Optional: true to regenerate existing invoices
+  "date": "2026-08-04",  // Optional: generate for specific date
+  "cycle_type": "weekly", // Optional: "weekly" or "monthly"
+  "customer_id": 1       // Optional: generate for specific customer only
+}
+Response:
+
+json
+{
+  "code": 101,
+  "message": "Generated 5 invoices",
+  "data": {
+    "success": true,
+    "invoices_created": 5,
+    "invoices": [
+      {
+        "invoice_id": 1,
+        "invoice_number": "WCOL-2026-08-0001",
+        "customer_id": 1,
+        "customer_code": "CUST-001",
+        "full_name": "ROLAND PIAZI",
+        "period_start": "2026-08-02",
+        "period_end": "2026-08-08",
+        "cycle_name": "Weekly",
+        "total_amount": 348.00,
+        "status": "Sent"
+      }
+    ],
+    "errors": [],
+    "total_customers": 10,
+    "total_skipped": 5,
+    "duration_seconds": "1.23",
+    "timestamp": "2026-08-04T10:00:00.000Z"
+  }
+}
+📊 DASHBOARD STATUS
+GET /status
+Purpose: Get invoice generation statistics for dashboard
+
+Response:
+
+json
+{
+  "code": 101,
+  "message": "Invoice generation status retrieved",
+  "data": {
+    "total_customers": 25,
+    "invoices_this_month": 18,
+    "invoices_this_week": 8,
+    "invoices_today": 3,
+    "generated_percentage": 72,
+    "last_generation": "2026-08-04T06:00:00.000Z"
+  }
+}
+📅 UPCOMING INVOICES
+GET /upcoming
+Purpose: View invoices that will be generated in the next 7 days
+
+Response:
+
+json
+{
+  "code": 101,
+  "message": "Upcoming invoices retrieved",
+  "data": [
+    {
+      "customer_id": 1,
+      "customer_code": "CUST-001",
+      "full_name": "ROLAND PIAZI",
+      "cycle_name": "Weekly",
+      "cycle_price": 300.00,
+      "next_invoice_date": "2026-08-09",
+      "estimated_amount": 348.00
+    },
+    {
+      "customer_id": 2,
+      "customer_code": "CUST-002",
+      "full_name": "John Doe",
+      "cycle_name": "Monthly",
+      "cycle_price": 1200.00,
+      "next_invoice_date": "2026-09-01",
+      "estimated_amount": 1392.00
+    }
+  ],
+  "metadata": {
+    "total": 8,
+    "estimated_total": 2784.00
+  }
+}
+⚠️ OVERDUE INVOICES
+POST /check-overdue
+Purpose: Check and mark overdue invoices
+
+Response:
+
+json
+{
+  "code": 101,
+  "message": "Overdue invoices updated",
+  "data": {
+    "success": true,
+    "updated_count": 3,
+    "message": "3 invoices marked as overdue"
+  }
+}
+📄 INVOICE LIST
+GET /
+Purpose: Get all invoices with filtering and pagination
+
+Query Parameters:
+
+Parameter	Type	Description
+customer_id	integer	Filter by customer
+status	string	Draft, Sent, Paid, Partial, Overdue, Cancelled
+cycle_type	string	weekly, monthly
+start_date	date	YYYY-MM-DD
+end_date	date	YYYY-MM-DD
+page	integer	Default: 1
+limit	integer	Default: 50
+Example Request:
+
+text
+GET /invoices?customer_id=1&status=Sent&page=1&limit=10
+Response:
+
+json
+{
+  "code": 101,
+  "message": "Invoices retrieved successfully",
+  "data": [
+    {
+      "id": 1,
+      "invoice_number": "WCOL-2026-08-0001",
+      "invoice_date": "2026-08-04",
+      "due_date": "2026-08-18",
+      "period_start": "2026-08-02",
+      "period_end": "2026-08-08",
+      "cycle_type": "weekly",
+      "subtotal": 300.00,
+      "tax": 48.00,
+      "total_amount": 348.00,
+      "paid_amount": 0.00,
+      "status": "Sent",
+      "notes": "Weekly collection service",
+      "created_at": "2026-08-04T06:00:00.000Z",
+      "customer_id": 1,
+      "customer_code": "CUST-001",
+      "full_name": "ROLAND PIAZI",
+      "phone": "+254723572561",
+      "email": "mtabitha@gmail.com",
+      "cycle_id": 1,
+      "cycle_name": "Weekly",
+      "cycle_price": 300.00,
+      "items": [
+        {
+          "id": 1,
+          "invoice_id": 1,
+          "description": "Weekly Collection Service - 2026-08-02 to 2026-08-08",
+          "quantity": 1,
+          "unit_price": 300.00,
+          "total_price": 300.00
+        },
+        {
+          "id": 2,
+          "invoice_id": 1,
+          "description": "VAT (16%)",
+          "quantity": 1,
+          "unit_price": 48.00,
+          "total_price": 48.00
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 25,
+    "totalPages": 3
+  },
+  "metadata": {
+    "total_amount": 348.00,
+    "total_paid": 0.00,
+    "total_balance": 348.00
+  }
+}
+📄 GET SINGLE INVOICE
+GET /:id
+Purpose: Get detailed invoice with all items
+
+Response:
+
+json
+{
+  "code": 101,
+  "message": "Invoice retrieved successfully",
+  "data": {
+    "id": 1,
+    "invoice_number": "WCOL-2026-08-0001",
+    "invoice_date": "2026-08-04",
+    "due_date": "2026-08-18",
+    "period_start": "2026-08-02",
+    "period_end": "2026-08-08",
+    "cycle_type": "weekly",
+    "subtotal": 300.00,
+    "tax": 48.00,
+    "total_amount": 348.00,
+    "paid_amount": 0.00,
+    "status": "Sent",
+    "notes": "Weekly collection service",
+    "created_at": "2026-08-04T06:00:00.000Z",
+    "customer_id": 1,
+    "customer_code": "CUST-001",
+    "full_name": "ROLAND PIAZI",
+    "phone": "+254723572561",
+    "email": "mtabitha@gmail.com",
+    "address": "NAIVASHA TOWN LEMACY PLAZA",
+    "cycle_id": 1,
+    "cycle_name": "Weekly",
+    "cycle_price": 300.00,
+    "items": [
+      {
+        "id": 1,
+        "invoice_id": 1,
+        "description": "Weekly Collection Service - 2026-08-02 to 2026-08-08",
+        "quantity": 1,
+        "unit_price": 300.00,
+        "total_price": 300.00
+      },
+      {
+        "id": 2,
+        "invoice_id": 1,
+        "description": "VAT (16%)",
+        "quantity": 1,
+        "unit_price": 48.00,
+        "total_price": 48.00
+      }
+    ]
+  }
+}
+✏️ UPDATE INVOICE
+PUT /:id
+Purpose: Update invoice status, notes, or due date
+
+Payload:
+
+json
+{
+  "status": "Paid",        // Draft, Sent, Paid, Partial, Overdue, Cancelled
+  "notes": "Payment received",
+  "due_date": "2026-08-25"
+}
+Response:
+
+json
+{
+  "code": 101,
+  "message": "Invoice updated successfully"
+}
