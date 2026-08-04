@@ -170,8 +170,25 @@ const WcolInvoicesPage = {
         });
 
         // ── Generate invoices ─────────────────────────────────────────────────
-        document.getElementById('wcolInvGenerate')?.addEventListener('click', () => {
-            this._showGenerateModal(container);
+        document.getElementById('wcolInvGenerate')?.addEventListener('click', async () => {
+            const btn = document.getElementById('wcolInvGenerate');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generating…';
+            try {
+                const res = await HttpService.post(API.wcolInvoices.sync, {});
+                if (res.ok) {
+                    const d = res.data?.data || {};
+                    UI.toast(`Generated ${d.invoices_created ?? 0} invoice(s)`, 'success');
+                    await this._loadList(container, {});
+                } else {
+                    UI.toast(res.data?.message || 'Generation failed', 'danger');
+                }
+            } catch (_) {
+                UI.toast('Network error', 'danger');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-lightning-charge"></i> Generate Invoices';
+            }
         });
 
         // ── Check overdue ─────────────────────────────────────────────────────
@@ -195,97 +212,6 @@ const WcolInvoicesPage = {
         // ── Upcoming invoices ─────────────────────────────────────────────────
         document.getElementById('wcolInvUpcoming')?.addEventListener('click', () => {
             this._showUpcomingModal();
-        });
-    },
-
-    // ─── Generate Modal ─────────────────────────────────────────────────────
-
-    _showGenerateModal(container) {
-        const today = new Date().toISOString().split('T')[0];
-        const modalId = 'wcolGenModal';
-        document.getElementById(modalId)?.remove();
-
-        document.body.insertAdjacentHTML('beforeend', `
-            <div class="modal fade" id="${modalId}" tabindex="-1">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title"><i class="bi bi-lightning-charge text-success me-2"></i>Generate Invoices</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <form id="wcolGenForm" class="row g-3">
-                                <div class="col-12">
-                                    <label class="form-label fw-semibold">Date <span class="text-muted fw-normal">(optional — defaults to today)</span></label>
-                                    <input type="date" id="genDate" class="form-control" value="${today}">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">Cycle Type <span class="text-muted fw-normal">(optional)</span></label>
-                                    <select id="genCycle" class="form-select">
-                                        <option value="">All cycles</option>
-                                        <option value="weekly">Weekly</option>
-                                        <option value="monthly">Monthly</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">Customer ID <span class="text-muted fw-normal">(optional)</span></label>
-                                    <input type="number" id="genCustomer" class="form-control" placeholder="Leave blank for all">
-                                </div>
-                                <div class="col-12">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="genForce">
-                                        <label class="form-check-label" for="genForce">
-                                            Force regenerate <span class="text-muted">(overwrites existing invoices for the period)</span>
-                                        </label>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-                        <div class="modal-footer">
-                            <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button class="btn btn-success" id="wcolGenSubmit">
-                                <i class="bi bi-lightning-charge"></i> Generate
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>`);
-
-        const modal = new bootstrap.Modal(document.getElementById(modalId));
-        modal.show();
-
-        document.getElementById('wcolGenSubmit').addEventListener('click', async () => {
-            const btn = document.getElementById('wcolGenSubmit');
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generating…';
-
-            const customerRaw = document.getElementById('genCustomer').value.trim();
-            const payload = {
-                force:       document.getElementById('genForce').checked || undefined,
-                date:        document.getElementById('genDate').value    || undefined,
-                cycle_type:  document.getElementById('genCycle').value   || undefined,
-                customer_id: customerRaw ? parseInt(customerRaw, 10) : undefined,
-            };
-            // strip undefined keys
-            Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
-
-            try {
-                const res = await HttpService.post(API.wcolInvoices.sync, payload);
-                if (res.ok) {
-                    const d = res.data?.data || {};
-                    UI.toast(`Generated ${d.invoices_created ?? 0} invoice(s) in ${d.duration_seconds ?? '?'}s`, 'success');
-                    modal.hide();
-                    await this._loadList(container, {});
-                } else {
-                    UI.toast(res.data?.message || 'Generation failed', 'danger');
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-lightning-charge"></i> Generate';
-                }
-            } catch (_) {
-                UI.toast('Network error', 'danger');
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-lightning-charge"></i> Generate';
-            }
         });
     },
 
