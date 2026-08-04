@@ -106,7 +106,8 @@ const WcolPaymentsPage = {
             emptyMessage: 'No payments found for this period.',
             actions: row => `
                 <button class="btn btn-sm btn-outline-info me-1"    onclick="Router.navigate('#/wcol-payments?id=${row.id}')"><i class="bi bi-eye"></i></button>
-                <button class="btn btn-sm btn-outline-primary"       onclick="WcolPaymentsPage.showEdit(${row.id})"><i class="bi bi-pencil"></i></button>`,
+                <button class="btn btn-sm btn-outline-primary me-1" onclick="WcolPaymentsPage.showEdit(${row.id})"><i class="bi bi-pencil"></i></button>
+                <button class="btn btn-sm btn-outline-danger"        onclick="WcolPaymentsPage.deletePayment(${row.id})"><i class="bi bi-trash"></i></button>`,
         });
 
         container.innerHTML = statsHtml + UI.pageCard({
@@ -298,6 +299,22 @@ const WcolPaymentsPage = {
     showEdit(id) {
         const p = this.payments.find(p => p.id === id);
         if (p) this.renderForm(document.getElementById('pageContent'), p);
+    },
+
+    deletePayment(id) {
+        UI.confirm('Delete Payment', 'Are you sure you want to delete this payment? This cannot be undone.', async () => {
+            try {
+                const res = await HttpService.del(API.wcolPayments.delete(id));
+                if (res.ok) {
+                    UI.toast('Payment deleted', 'success');
+                    this.render(document.getElementById('pageContent'));
+                } else {
+                    UI.toast(res.data?.message || 'Failed to delete payment', 'danger');
+                }
+            } catch (err) {
+                UI.toast('Network error', 'danger');
+            }
+        });
     },
 };
 

@@ -85,6 +85,7 @@ const API = {
         get:    (id) => `${API_BASE_URL}/api/wasteCol/payments/${id}`,
         create: `${API_BASE_URL}/api/wasteCol/payments`,
         update: (id) => `${API_BASE_URL}/api/wasteCol/payments/${id}`,
+        delete: (id) => `${API_BASE_URL}/api/wasteCol/payments/${id}`,
     },
 
     // ─── Wcol: Cycles (collection plans) ────────────────────────────────────
